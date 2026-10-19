@@ -47,11 +47,20 @@ var _fast_dsp: RefCounted = null
 var _is_live_silent: bool = true
 var _silent_samples_count: int = 0
 
+# Fine-tunable Instrument & Player Neural Adapter Parameters
+var onset_threshold: float = 0.52
+var sustain_threshold: float = 0.35
+var active_model_path: String = MODEL_PATH
+var per_bin_gain_adapter: PackedFloat32Array = PackedFloat32Array()
+
 func _init() -> void:
 	_summary_template = PackedFloat32Array()
 	_summary_template.resize(SUMMARY_FLOATS)
 	_full_template = PackedFloat32Array()
 	_full_template.resize(FULL_FLOATS)
+
+	per_bin_gain_adapter.resize(N_BINS)
+	per_bin_gain_adapter.fill(1.0)
 
 	_ring_buffer_22k.resize(AUDIO_WINDOW_SAMPLES)
 	_ring_buffer_22k.fill(0.0)
@@ -63,6 +72,48 @@ func _init() -> void:
 
 	if is_available():
 		initialize()
+
+func apply_instrument_profile(d: Dictionary) -> void:
+	if d.is_empty():
+		return
+	onset_threshold = clampf(float(d.get("onnx_onset_threshold", onset_threshold)), 0.30, 0.80)
+	sustain_threshold = clampf(float(d.get("onnx_sustain_threshold", sustain_threshold)), 0.20, 0.65)
+	if d.has("per_bin_gain_adapter") and d["per_bin_gain_adapter"] is Array:
+		var arr: Array = d["per_bin_gain_adapter"]
+		per_bin_gain_adapter.resize(N_BINS)
+		for i in range(N_BINS):
+			if i < arr.size():
+				per_bin_gain_adapter[i] = clampf(float(arr[i]), 0.5, 1.5)
+			else:
+				per_bin_gain_adapter[i] = 1.0
+	if _fast_dsp != null and _fast_dsp.has_method("apply_instrument_profile"):
+		_fast_dsp.apply_instrument_profile(d)
+	var custom_path: String = String(d.get("custom_onnx_model_path", "")).strip_edges()
+	if not custom_path.is_empty() and custom_path != active_model_path and FileAccess.file_exists(custom_path):
+		reload_model(custom_path)
+
+func reload_model(model_path: String) -> bool:
+	if not Engine.has_meta("onnx_pitch_native"):
+		return false
+	if _worker_task_id != -1:
+		WorkerThreadPool.wait_for_task_completion(_worker_task_id)
+		_worker_task_id = -1
+	var meta_val: Variant = Engine.get_meta("onnx_pitch_native")
+	if typeof(meta_val) != TYPE_CALLABLE:
+		return false
+	_native_callable = meta_val
+	if not FileAccess.file_exists(model_path):
+		return false
+	var model_bytes: PackedByteArray = FileAccess.get_file_as_bytes(model_path)
+	if model_bytes.is_empty():
+		return false
+	var rc: Variant = _native_callable.call(0, model_bytes, model_bytes.size())
+	var ok: bool = (typeof(rc) == TYPE_INT and int(rc) == 1)
+	if ok:
+		_is_ready = true
+		active_model_path = model_path
+		model_ready.emit()
+	return ok
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE:
@@ -92,12 +143,13 @@ func initialize(model_path: String = MODEL_PATH) -> bool:
 		return false
 	_native_callable = meta_val
 
-	# Check if already initialized in C memory (Command 2)
-	var status_val: Variant = _native_callable.call(2)
-	if typeof(status_val) == TYPE_INT and int(status_val) == 1:
-		_is_ready = true
-		model_ready.emit()
-		return true
+	# Check if already initialized in C memory (Command 2) when loading default path
+	if model_path == active_model_path:
+		var status_val: Variant = _native_callable.call(2)
+		if typeof(status_val) == TYPE_INT and int(status_val) == 1:
+			_is_ready = true
+			model_ready.emit()
+			return true
 
 	var target_path: String = model_path
 	if not FileAccess.file_exists(target_path):
@@ -116,6 +168,7 @@ func initialize(model_path: String = MODEL_PATH) -> bool:
 	var rc: Variant = _native_callable.call(0, model_bytes, model_bytes.size())
 	_is_ready = (typeof(rc) == TYPE_INT and int(rc) == 1)
 	if _is_ready:
+		active_model_path = target_path
 		model_ready.emit()
 	else:
 		model_error.emit("ONNX native initialization failed with return code: %s" % str(rc))
@@ -183,15 +236,19 @@ func transcribe_live_window(
 	frame_probs.resize(N_BINS)
 	var candidate_bins: Array[int] = []
 	var elevated_bins: int = 0
+	var has_adapter: bool = (per_bin_gain_adapter.size() == N_BINS)
 
 	for b in range(N_BINS):
-		var np: float = out[note_offset + b]
-		var op: float = out[onset_offset + b]
+		var gain: float = per_bin_gain_adapter[b] if has_adapter else 1.0
+		var np: float = clampf(out[note_offset + b] * gain, 0.0, 1.0)
+		var op: float = clampf(out[onset_offset + b] * gain, 0.0, 1.0)
 		frame_probs[b] = snappedf(np, 0.0001)
 		if np >= 0.22:
 			elevated_bins += 1
-		var prev_np: float = out[note_offset + b - 1] if b > 0 else 0.0
-		var next_np: float = out[note_offset + b + 1] if b + 1 < N_BINS else 0.0
+		var prev_gain: float = per_bin_gain_adapter[b - 1] if (has_adapter and b > 0) else 1.0
+		var next_gain: float = per_bin_gain_adapter[b + 1] if (has_adapter and b + 1 < N_BINS) else 1.0
+		var prev_np: float = clampf(out[note_offset + b - 1] * prev_gain, 0.0, 1.0) if b > 0 else 0.0
+		var next_np: float = clampf(out[note_offset + b + 1] * next_gain, 0.0, 1.0) if b + 1 < N_BINS else 0.0
 		var is_peak: bool = (np >= prev_np and np >= next_np)
 		if is_peak and (np >= note_threshold or (np >= note_threshold * 0.85 and op >= 0.50)):
 			candidate_bins.append(b)
@@ -488,8 +545,8 @@ func _get_ordered_22k_window() -> PackedFloat32Array:
 
 func _run_worker(win_22k: PackedFloat32Array) -> void:
 	var t0: int = Time.get_ticks_usec()
-	# Use 0.35 base threshold so sustained notes (>1-2s after attack) remain tracked via hysteresis
-	var res: Dictionary = transcribe_live_window(win_22k, 0.35, false)
+	# Use sustain_threshold so sustained notes (>1-2s after attack) remain tracked via hysteresis
+	var res: Dictionary = transcribe_live_window(win_22k, sustain_threshold, false)
 	var elapsed_ms: float = float(Time.get_ticks_usec() - t0) / 1000.0
 	res["latency_ms"] = elapsed_ms
 
@@ -530,12 +587,12 @@ func _consume_worker_if_done() -> void:
 				var already_sustaining: bool = _onnx_active_pitches.has(p) or _active_pitches.has(p)
 
 				if already_sustaining:
-					# Hysteresis: keep already-active sustained notes alive down to 0.35 probability
-					if prob < 0.35:
+					# Hysteresis: keep already-active sustained notes alive down to sustain_threshold
+					if prob < sustain_threshold:
 						continue
 				else:
-					# Strict onset filter: new notes require >= 0.52 probability and 2-hop persistence
-					if prob < 0.52 or not _prev_onnx_pitches.has(p):
+					# Strict onset filter: new notes require >= onset_threshold probability and 2-hop persistence
+					if prob < onset_threshold or not _prev_onnx_pitches.has(p):
 						continue
 					new_onnx_onsets.append(p)
 
@@ -547,7 +604,7 @@ func _consume_worker_if_done() -> void:
 				var p: int = int(p_var)
 				var bin_idx: int = p - MIDI_OFFSET
 				var prob: float = float(frame_probs[bin_idx]) if (bin_idx >= 0 and bin_idx < frame_probs.size()) else 0.0
-				if prob >= 0.50:
+				if prob >= onset_threshold - 0.02:
 					raw_onnx.append(p)
 			_prev_onnx_pitches = raw_onnx
 

@@ -79,6 +79,7 @@ func _run_all_suites() -> void:
 	test_suite_8_oscilloscope_mic_dropdown_and_live_dsp()
 	test_suite_9_native_onnx_driver_pipeline()
 	test_suite_10_custom_song_import_and_ios_readiness()
+	test_suite_11_latency_calibration_and_instrument_finetuning()
 
 	print("==================================================")
 	print(" RESULTS: %d Passed, %d Failed" % [tests_passed, tests_failed])
@@ -522,3 +523,93 @@ func test_suite_10_custom_song_import_and_ios_readiness() -> void:
 			am._music_player.stream = null
 		am._current_stream = null
 	main_node.free()
+
+func test_suite_11_latency_calibration_and_instrument_finetuning() -> void:
+	print("\n--- Test Suite 11: Latency Calibration & Instrument Model Fine-Tuning ---")
+	var InstrumentProfileScript = load("res://scripts/inference/instrument_profile.gd")
+	assert_true(InstrumentProfileScript != null, "InstrumentProfile script loads cleanly")
+
+	var profile = InstrumentProfileScript.new("balanced")
+	assert_eq(profile.preset_id, "balanced", "Default preset is 'balanced'")
+	assert_eq(profile.input_latency_offset_ms, 50.0, "Default input latency offset is 50.0 ms")
+	assert_eq(profile.per_bin_gain_adapter.size(), 88, "88-bin neural gain adapter initialized")
+
+	# Test preset switching
+	profile.apply_preset("plucked_guitar")
+	assert_eq(profile.preset_id, "plucked_guitar", "Preset switched to 'plucked_guitar'")
+	assert_eq(profile.harmonic_2nd_suppression, 0.62, "Guitar preset harmonic 2nd suppression set to 0.62")
+	assert_eq(profile.onnx_sustain_threshold, 0.30, "Guitar preset ONNX sustain threshold set to 0.30")
+
+	profile.apply_preset("bowed_strings")
+	assert_eq(profile.preset_id, "bowed_strings", "Preset switched to 'bowed_strings'")
+	assert_eq(profile.harmonic_2nd_suppression, 0.65, "Bowed strings harmonic 2nd suppression set to 0.65")
+	assert_eq(profile.dsp_attack_crest_min, 3.2, "Bowed strings attack crest minimum set to 3.2")
+
+	# Test learning from synthetic instrument audio (A4 440Hz / MIDI 69 tone with 2nd harmonic)
+	var synthetic_instrument := PackedFloat32Array()
+	var sr: float = 48000.0
+	var dur_samples: int = int(sr * 0.5) # 0.5s tone
+	synthetic_instrument.resize(dur_samples)
+	for i in range(dur_samples):
+		var t: float = float(i) / sr
+		var f0: float = sin(TAU * 440.0 * t) * 0.45
+		var f1: float = sin(TAU * 880.0 * t) * 0.25 # 2nd harmonic
+		synthetic_instrument[i] = f0 + f1
+
+	var learn_res: Dictionary = profile.learn_from_instrument_samples(synthetic_instrument, sr)
+	assert_true(bool(learn_res.get("ok", false)), "learn_from_instrument_samples successfully analyzed tone")
+	assert_eq(profile.preset_id, "custom_finetuned", "Preset transitioned to 'custom_finetuned'")
+	assert_true(profile.per_bin_gain_adapter[69 - 21] >= 1.0, "88-bin neural adapter calibrated for detected fundamental register")
+
+	# Test serialization & dictionary round-trip
+	var p_dict: Dictionary = profile.to_dict()
+	var restored_profile = InstrumentProfileScript.new()
+	restored_profile.from_dict(p_dict)
+	assert_eq(restored_profile.preset_id, "custom_finetuned", "Restored profile preset_id matches")
+	assert_true(absf(restored_profile.harmonic_2nd_suppression - profile.harmonic_2nd_suppression) < 0.005, "Restored profile harmonic suppression matches within float rounding")
+
+	# Test InferenceService integration
+	var inf = root.get_node_or_null("InferenceService")
+	if inf != null:
+		inf.set_instrument_preset("woodwind_brass", false)
+		assert_eq(inf.instrument_profile.preset_id, "woodwind_brass", "InferenceService.set_instrument_preset updated profile")
+		var summary: Dictionary = inf.get_status_summary()
+		assert_true(summary.has("profile_name"), "InferenceService summary reports profile_name")
+		assert_true(summary.has("calibration_ms"), "InferenceService summary reports calibration_ms")
+
+	# Test Main & HUD calibration synchronization
+	var main_scene_res = load("res://scenes/main.tscn")
+	var main_node = main_scene_res.instantiate()
+	main_node.enable_mic_capture = false
+	main_node.auto_pass_desktop = true
+	root.add_child(main_node)
+
+	var hud = main_node.hud
+	assert_true(hud.calibrate_btn != null, "HUD CalibrateBtn initialized")
+	assert_true(hud.calibration_modal != null, "HUD CalibrationModal initialized")
+	assert_true(hud.latency_slider != null, "HUD LatencySlider initialized")
+	assert_true(hud.latency_spin != null, "HUD LatencySpin initialized")
+	assert_true(hud.auto_cal_btn != null, "HUD AutoCalBtn initialized")
+
+	# Test opening calibration modal
+	hud.toggle_calibration_modal()
+	assert_eq(hud.calibration_modal.visible, true, "toggle_calibration_modal opens modal")
+
+	# Test setting latency offset through Main
+	main_node.set_input_calibration_offset_ms(75.0)
+	assert_eq(main_node.input_calibration_offset_sec, 0.075, "Main.input_calibration_offset_sec updated to 0.075s")
+	var ss = root.get_node_or_null("ScoringService")
+	if ss != null:
+		assert_eq(ss.input_calibration_offset_sec, 0.075, "ScoringService.input_calibration_offset_sec synchronized")
+	assert_eq(hud.latency_slider.value, 75.0, "HUD LatencySlider updated to 75.0 ms")
+	assert_eq(hud.latency_spin.value, 75.0, "HUD LatencySpin updated to 75.0 ms")
+
+	# Test relative adjustment (KEY_LEFT / KEY_RIGHT simulation)
+	main_node._adjust_calibration(+10.0)
+	assert_eq(main_node.input_calibration_offset_sec, 0.085, "Main._adjust_calibration(+10ms) updated offset to 85.0 ms")
+	assert_eq(hud.latency_slider.value, 85.0, "HUD LatencySlider updated to 85.0 ms after adjustment")
+
+	main_node.audio_player.stop()
+	main_node.audio_player.stream = null
+	main_node.free()
+

@@ -221,6 +221,8 @@ func _connect_node_signals() -> void:
 			hud.piece_selected.connect(_on_hud_piece_selected)
 		if hud.has_signal("custom_song_requested") and not hud.custom_song_requested.is_connected(_on_hud_custom_song_requested):
 			hud.custom_song_requested.connect(_on_hud_custom_song_requested)
+		if hud.has_signal("latency_calibration_changed") and not hud.latency_calibration_changed.is_connected(set_input_calibration_offset_ms):
+			hud.latency_calibration_changed.connect(set_input_calibration_offset_ms)
 
 		_refresh_hud_microphones()
 
@@ -744,6 +746,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				restart_playback()
 			KEY_T:
 				_on_hud_test_signal_requested()
+			KEY_C:
+				if hud != null and hud.has_method("toggle_calibration_modal"):
+					hud.toggle_calibration_modal()
 			KEY_SPACE:
 				_simulate_keyboard_strum()
 			KEY_LEFT:
@@ -751,7 +756,26 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_RIGHT:
 				_adjust_calibration(+5.0)
 
+func set_input_calibration_offset_ms(offset_ms: float) -> void:
+	var clamped_ms: float = clampf(offset_ms, -200.0, 300.0)
+	input_calibration_offset_sec = clamped_ms / 1000.0
+	if has_node("/root/ScoringService"):
+		var ss = get_node("/root/ScoringService")
+		if "input_calibration_offset_sec" in ss:
+			ss.input_calibration_offset_sec = input_calibration_offset_sec
+	if has_node("/root/InferenceService"):
+		var inf = get_node("/root/InferenceService")
+		if "instrument_profile" in inf and inf.instrument_profile != null:
+			inf.instrument_profile.input_latency_offset_ms = clamped_ms
+			if DisplayServer.get_name() != "headless":
+				inf.instrument_profile.save_to_disk()
+	if hud != null and hud.has_method("set_latency_offset_ms_ui"):
+		hud.set_latency_offset_ms_ui(clamped_ms)
+	calibration_changed.emit(clamped_ms)
+
 func _adjust_calibration(delta_ms: float) -> void:
+	var next_ms: float = (input_calibration_offset_sec * 1000.0) + delta_ms
+	set_input_calibration_offset_ms(next_ms)
 	if level_loader != null:
 		level_loader.set_calibration_offset_ms(level_loader.calibration_offset_ms + delta_ms)
 		var cal_sec: float = level_loader.get_calibration_offset_sec()

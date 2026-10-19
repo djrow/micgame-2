@@ -19,6 +19,10 @@ signal custom_song_requested(sheet_path: String, audio_path: String, bpm: float)
 signal play_pause_toggled()
 signal restart_requested()
 signal seek_requested(time_sec: float)
+signal latency_calibration_changed(offset_ms: float)
+signal instrument_preset_selected(preset_id: String)
+signal live_finetune_requested()
+signal custom_onnx_model_selected(model_path: String)
 
 # Palette
 const COLOR_PERFECT: Color = Color(1.0, 0.84, 0.0)      # Gold (#FFD700)
@@ -42,6 +46,7 @@ const COLOR_MULT_4X: Color = Color(1.00, 0.84, 0.00)   # Gold
 @onready var piece3_btn: Button = $SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons/Piece3Btn if has_node("SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons/Piece3Btn") else null
 @onready var omr_btn: Button = $SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons/OMRScanBtn if has_node("SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons/OMRScanBtn") else null
 @onready var custom_btn: Button = $SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons/CustomSongBtn if has_node("SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons/CustomSongBtn") else null
+@onready var calibrate_btn: Button = $SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons/CalibrateBtn if has_node("SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons/CalibrateBtn") else null
 @onready var play_pause_btn: Button = $SafeMarginContainer/MainLayout/TopBar/TopHBox/PlaybackControls/PlayPauseBtn if has_node("SafeMarginContainer/MainLayout/TopBar/TopHBox/PlaybackControls/PlayPauseBtn") else null
 @onready var restart_btn: Button = $SafeMarginContainer/MainLayout/TopBar/TopHBox/PlaybackControls/RestartBtn if has_node("SafeMarginContainer/MainLayout/TopBar/TopHBox/PlaybackControls/RestartBtn") else null
 
@@ -81,6 +86,18 @@ const COLOR_MULT_4X: Color = Color(1.00, 0.84, 0.00)   # Gold
 @onready var custom_audio_input: LineEdit = $CustomSongModal/ModalVBox/AudioRow/CustomAudioInput if has_node("CustomSongModal/ModalVBox/AudioRow/CustomAudioInput") else null
 @onready var custom_bpm_spin: SpinBox = $CustomSongModal/ModalVBox/BpmRow/CustomBpmSpin if has_node("CustomSongModal/ModalVBox/BpmRow/CustomBpmSpin") else null
 
+# Calibration & Instrument Fine-Tuning Modal
+@onready var calibration_modal: PanelContainer = $CalibrationModal if has_node("CalibrationModal") else null
+@onready var latency_slider: HSlider = $CalibrationModal/CalVBox/LatencyRow/LatencySlider if has_node("CalibrationModal/CalVBox/LatencyRow/LatencySlider") else null
+@onready var latency_spin: SpinBox = $CalibrationModal/CalVBox/LatencyRow/LatencySpin if has_node("CalibrationModal/CalVBox/LatencyRow/LatencySpin") else null
+@onready var auto_cal_btn: Button = $CalibrationModal/CalVBox/LatencyRow/AutoCalBtn if has_node("CalibrationModal/CalVBox/LatencyRow/AutoCalBtn") else null
+@onready var instrument_preset_dropdown: OptionButton = $CalibrationModal/CalVBox/PresetRow/InstrumentPresetDropdown if has_node("CalibrationModal/CalVBox/PresetRow/InstrumentPresetDropdown") else null
+@onready var finetune_capture_btn: Button = $CalibrationModal/CalVBox/PresetRow/FinetuneCaptureBtn if has_node("CalibrationModal/CalVBox/PresetRow/FinetuneCaptureBtn") else null
+@onready var custom_model_input: LineEdit = $CalibrationModal/CalVBox/ModelRow/CustomModelInput if has_node("CalibrationModal/CalVBox/ModelRow/CustomModelInput") else null
+@onready var browse_model_btn: Button = $CalibrationModal/CalVBox/ModelRow/BrowseModelBtn if has_node("CalibrationModal/CalVBox/ModelRow/BrowseModelBtn") else null
+@onready var calibration_status_label: Label = $CalibrationModal/CalVBox/CalibrationStatusLabel if has_node("CalibrationModal/CalVBox/CalibrationStatusLabel") else null
+@onready var close_calibration_btn: Button = $CalibrationModal/CalVBox/CalActionRow/CloseCalibrationBtn if has_node("CalibrationModal/CalVBox/CalActionRow/CloseCalibrationBtn") else null
+
 # Internal state
 var displayed_score: int = 0
 var score_tween: Tween = null
@@ -89,10 +106,17 @@ var _last_onset_text: String = "Last Onset: —"
 var _oscilloscope_instance: Control = null
 var oscilloscope_view: Control = null
 var _is_user_scrubbing: bool = false
+var _syncing_latency_controls: bool = false
+var _auto_cal_active: bool = false
+var _auto_cal_start_sec: float = 0.0
+var _auto_cal_last_beat_idx: int = -1
+var _auto_cal_deltas_ms: Array[float] = []
+var _finetune_countdown_sec: float = 0.0
 
 # File dialogs
 var sheet_file_dialog: FileDialog = null
 var audio_file_dialog: FileDialog = null
+var onnx_file_dialog: FileDialog = null
 
 func _enter_tree() -> void:
 	_ensure_hierarchy()
@@ -116,6 +140,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_update_timeline_playhead()
 	_process_onset_flash(delta)
+	_process_calibration_timers(delta)
 
 ## Dynamically adapts margins based on DisplayServer safe areas on mobile,
 ## with clean uniform margins on desktop and headless environments.
@@ -230,10 +255,20 @@ func bind_services() -> void:
 			var cb = Callable(self, "_on_inference_backend_changed")
 			if not inf.is_connected("backend_changed", cb):
 				inf.connect("backend_changed", cb)
+		if inf.has_signal("instrument_profile_changed"):
+			var cb = Callable(self, "_on_inference_profile_changed")
+			if not inf.is_connected("instrument_profile_changed", cb):
+				inf.connect("instrument_profile_changed", cb)
+		if inf.has_signal("finetune_completed"):
+			var cb = Callable(self, "_on_inference_finetune_completed")
+			if not inf.is_connected("finetune_completed", cb):
+				inf.connect("finetune_completed", cb)
 		# Initial status populate
 		if inf.has_method("get_status_summary"):
 			var status = inf.get_status_summary()
 			update_inference_telemetry(status)
+		if "instrument_profile" in inf and inf.instrument_profile != null:
+			sync_calibration_ui_from_profile(inf.instrument_profile.to_dict())
 
 	# 5. GameManager
 	if has_node("/root/GameManager"):
@@ -437,7 +472,12 @@ func update_inference_telemetry(status: Dictionary, recent_onsets: Array = []) -
 		inference_backend_label.modulate = Color(0.2, 1.0, 0.55) if is_ready else Color(1.0, 0.65, 0.2)
 
 	if inference_metrics_label != null:
-		inference_metrics_label.text = "Latency: %.1f ms" % latency_ms
+		var cal_ms: float = float(status.get("calibration_ms", 50.0))
+		var prof_name: String = String(status.get("profile_name", ""))
+		if not prof_name.is_empty():
+			inference_metrics_label.text = "Latency: %.1f ms | Cal: %+d ms | %s" % [latency_ms, int(round(cal_ms)), prof_name]
+		else:
+			inference_metrics_label.text = "Latency: %.1f ms | Cal: %+d ms" % [latency_ms, int(round(cal_ms))]
 
 	if detected_notes_label != null:
 		if pitches.is_empty():
@@ -549,12 +589,39 @@ func _on_inference_pitch_detected(pitches: Array[int], confidence_map: Dictionar
 
 func _on_inference_onset_detected(onsets: Array[int]) -> void:
 	update_inference_telemetry({}, onsets)
+	if _auto_cal_active and not onsets.is_empty():
+		_record_auto_cal_event()
 
 func _on_inference_backend_changed(_tier: int) -> void:
 	if has_node("/root/InferenceService"):
 		var inf = get_node("/root/InferenceService")
 		if inf.has_method("get_status_summary"):
 			update_inference_telemetry(inf.get_status_summary())
+
+func _on_inference_profile_changed(profile_dict: Dictionary) -> void:
+	sync_calibration_ui_from_profile(profile_dict)
+	if has_node("/root/InferenceService"):
+		var inf = get_node("/root/InferenceService")
+		if inf.has_method("get_status_summary"):
+			update_inference_telemetry(inf.get_status_summary())
+
+func _on_inference_finetune_completed(result: Dictionary) -> void:
+	_finetune_countdown_sec = 0.0
+	if finetune_capture_btn != null:
+		finetune_capture_btn.disabled = false
+		finetune_capture_btn.text = "🎯 Fine-Tune to My Instrument (3s)"
+	if calibration_status_label != null:
+		if bool(result.get("ok", false)):
+			var dom_midi: int = int(result.get("dominant_midi", 60))
+			var on_th: float = float(result.get("onnx_onset_threshold", 0.50))
+			var sus_th: float = float(result.get("onnx_sustain_threshold", 0.34))
+			calibration_status_label.text = "✓ Fine-Tuned! Ref Note: %s (%d) | Onset: %.2f | Sustain: %.2f (Saved)" % [
+				_midi_to_name(dom_midi), dom_midi, on_th, sus_th
+			]
+			calibration_status_label.modulate = Color(0.25, 1.0, 0.6)
+		else:
+			calibration_status_label.text = "⚠ Fine-Tune incomplete: %s" % String(result.get("reason", "Play louder notes"))
+			calibration_status_label.modulate = Color(1.0, 0.65, 0.25)
 
 func _on_gm_piece_loaded(piece_id: String, metadata: Dictionary) -> void:
 	var p_title: String = metadata.get("title", piece_id)
@@ -583,6 +650,8 @@ func _wire_ui_buttons() -> void:
 
 	if custom_btn != null:
 		custom_btn.pressed.connect(_toggle_custom_song_modal)
+	if calibrate_btn != null:
+		calibrate_btn.pressed.connect(toggle_calibration_modal)
 
 	if refresh_mic_btn != null:
 		refresh_mic_btn.pressed.connect(func():
@@ -599,6 +668,7 @@ func _wire_ui_buttons() -> void:
 		song_progress_bar.gui_input.connect(_on_progress_bar_gui_input)
 
 	_build_custom_song_dialogs()
+	_build_calibration_dialogs()
 
 func _on_play_pause_pressed() -> void:
 	play_pause_toggled.emit()
@@ -739,6 +809,219 @@ func _on_confirm_custom_song() -> void:
 
 	if not sheet_path.is_empty():
 		custom_song_requested.emit(sheet_path, audio_path, bpm_val)
+
+func toggle_calibration_modal() -> void:
+	if calibration_modal != null:
+		calibration_modal.visible = not calibration_modal.visible
+		if calibration_modal.visible and custom_song_modal != null:
+			custom_song_modal.visible = false
+
+func _build_calibration_dialogs() -> void:
+	if instrument_preset_dropdown != null:
+		instrument_preset_dropdown.clear()
+		instrument_preset_dropdown.add_item("Balanced / Piano", 0)
+		instrument_preset_dropdown.set_item_metadata(0, "balanced")
+		instrument_preset_dropdown.add_item("Plucked Strings (Guitar / Harp)", 1)
+		instrument_preset_dropdown.set_item_metadata(1, "plucked_guitar")
+		instrument_preset_dropdown.add_item("Bowed Strings (Violin / Cello)", 2)
+		instrument_preset_dropdown.set_item_metadata(2, "bowed_strings")
+		instrument_preset_dropdown.add_item("Woodwind & Brass (Flute / Sax / Horn)", 3)
+		instrument_preset_dropdown.set_item_metadata(3, "woodwind_brass")
+		instrument_preset_dropdown.add_item("Vocal / Singing", 4)
+		instrument_preset_dropdown.set_item_metadata(4, "vocal")
+		instrument_preset_dropdown.add_item("Custom Fine-Tuned Instrument", 5)
+		instrument_preset_dropdown.set_item_metadata(5, "custom_finetuned")
+		instrument_preset_dropdown.item_selected.connect(_on_instrument_preset_selected)
+
+	if latency_slider != null:
+		latency_slider.value_changed.connect(_on_latency_slider_changed)
+	if latency_spin != null:
+		latency_spin.value_changed.connect(_on_latency_spin_changed)
+	if auto_cal_btn != null:
+		auto_cal_btn.pressed.connect(_start_4_beat_auto_calibration)
+	if finetune_capture_btn != null:
+		finetune_capture_btn.pressed.connect(_start_3s_instrument_finetune)
+	if close_calibration_btn != null:
+		close_calibration_btn.pressed.connect(func():
+			if calibration_modal != null:
+				calibration_modal.visible = false
+		)
+	if browse_model_btn != null:
+		browse_model_btn.pressed.connect(func():
+			if onnx_file_dialog != null:
+				onnx_file_dialog.popup_centered(Vector2i(720, 480))
+		)
+
+	onnx_file_dialog = FileDialog.new()
+	onnx_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	onnx_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	onnx_file_dialog.use_native_dialog = true
+	onnx_file_dialog.filters = PackedStringArray(["*.onnx ; ONNX Pitch Models"])
+	onnx_file_dialog.file_selected.connect(_on_onnx_model_file_selected)
+	add_child(onnx_file_dialog)
+
+func sync_calibration_ui_from_profile(d: Dictionary) -> void:
+	if d.is_empty():
+		return
+	_syncing_latency_controls = true
+	var cal_ms: float = float(d.get("input_latency_offset_ms", 50.0))
+	if latency_slider != null:
+		latency_slider.value = cal_ms
+	if latency_spin != null:
+		latency_spin.value = cal_ms
+	_syncing_latency_controls = false
+
+	var pid: String = String(d.get("preset_id", "balanced"))
+	if instrument_preset_dropdown != null:
+		for i in range(instrument_preset_dropdown.item_count):
+			if String(instrument_preset_dropdown.get_item_metadata(i)) == pid:
+				instrument_preset_dropdown.select(i)
+				break
+
+	var mpath: String = String(d.get("custom_onnx_model_path", ""))
+	if custom_model_input != null and not mpath.is_empty():
+		custom_model_input.text = mpath
+
+func set_latency_offset_ms_ui(offset_ms: float) -> void:
+	_syncing_latency_controls = true
+	if latency_slider != null:
+		latency_slider.value = offset_ms
+	if latency_spin != null:
+		latency_spin.value = offset_ms
+	_syncing_latency_controls = false
+
+func _on_latency_slider_changed(val: float) -> void:
+	if _syncing_latency_controls:
+		return
+	_syncing_latency_controls = true
+	if latency_spin != null:
+		latency_spin.value = val
+	_syncing_latency_controls = false
+	_apply_latency_offset_ms(val)
+
+func _on_latency_spin_changed(val: float) -> void:
+	if _syncing_latency_controls:
+		return
+	_syncing_latency_controls = true
+	if latency_slider != null:
+		latency_slider.value = val
+	_syncing_latency_controls = false
+	_apply_latency_offset_ms(val)
+
+func _apply_latency_offset_ms(val_ms: float) -> void:
+	latency_calibration_changed.emit(val_ms)
+	if has_node("/root/InferenceService"):
+		var inf = get_node("/root/InferenceService")
+		if "instrument_profile" in inf and inf.instrument_profile != null:
+			inf.instrument_profile.input_latency_offset_ms = val_ms
+			if DisplayServer.get_name() != "headless":
+				inf.instrument_profile.save_to_disk()
+			if inf.has_method("get_status_summary"):
+				update_inference_telemetry(inf.get_status_summary())
+
+func _on_instrument_preset_selected(index: int) -> void:
+	if instrument_preset_dropdown == null or index < 0 or index >= instrument_preset_dropdown.item_count:
+		return
+	var preset_id: String = String(instrument_preset_dropdown.get_item_metadata(index))
+	instrument_preset_selected.emit(preset_id)
+	if has_node("/root/InferenceService"):
+		var inf = get_node("/root/InferenceService")
+		if inf.has_method("set_instrument_preset"):
+			var d: Dictionary = inf.set_instrument_preset(preset_id)
+			if calibration_status_label != null:
+				calibration_status_label.text = "✓ Applied Preset: %s (Onset: %.2f, Sustain: %.2f)" % [
+					String(d.get("profile_name", preset_id)),
+					float(d.get("onnx_onset_threshold", 0.52)),
+					float(d.get("onnx_sustain_threshold", 0.35))
+				]
+				calibration_status_label.modulate = Color(0.25, 1.0, 0.6)
+
+func _start_3s_instrument_finetune() -> void:
+	live_finetune_requested.emit()
+	_finetune_countdown_sec = 3.0
+	if finetune_capture_btn != null:
+		finetune_capture_btn.disabled = true
+	if calibration_status_label != null:
+		calibration_status_label.text = "🎤 Listening (3.0s remaining)... Play notes or chords on your instrument now!"
+		calibration_status_label.modulate = Color(1.0, 0.88, 0.25)
+	if has_node("/root/InferenceService"):
+		var inf = get_node("/root/InferenceService")
+		if inf.has_method("start_live_instrument_finetune"):
+			inf.start_live_instrument_finetune(3.0)
+
+func _on_onnx_model_file_selected(path: String) -> void:
+	if custom_model_input != null:
+		custom_model_input.text = path
+	custom_onnx_model_selected.emit(path)
+	if has_node("/root/InferenceService"):
+		var inf = get_node("/root/InferenceService")
+		if inf.has_method("load_custom_onnx_model"):
+			var ok: bool = inf.load_custom_onnx_model(path)
+			if calibration_status_label != null:
+				if ok:
+					calibration_status_label.text = "✓ Loaded custom ONNX model: %s" % path.get_file()
+					calibration_status_label.modulate = Color(0.25, 1.0, 0.6)
+				else:
+					calibration_status_label.text = "⚠ Failed to load ONNX model: %s" % path.get_file()
+					calibration_status_label.modulate = Color(1.0, 0.35, 0.35)
+
+func _start_4_beat_auto_calibration() -> void:
+	_auto_cal_active = true
+	_auto_cal_start_sec = float(Time.get_ticks_usec()) / 1000000.0
+	_auto_cal_last_beat_idx = -1
+	_auto_cal_deltas_ms.clear()
+	if auto_cal_btn != null:
+		auto_cal_btn.disabled = true
+	if calibration_status_label != null:
+		calibration_status_label.text = "🥁 4-Beat Test Starting... Play a note or clap on each BEAT (1, 2, 3, 4)!"
+		calibration_status_label.modulate = Color(0.0, 0.92, 1.0)
+
+func _record_auto_cal_event() -> void:
+	if not _auto_cal_active:
+		return
+	var now_sec: float = float(Time.get_ticks_usec()) / 1000000.0
+	var elapsed: float = now_sec - _auto_cal_start_sec
+	# Beats occur at 0.5s, 1.0s, 1.5s, 2.0s (120 BPM)
+	var nearest_beat: int = clampi(int(round(elapsed / 0.5)), 1, 4)
+	var beat_time: float = float(nearest_beat) * 0.5
+	var delta_ms: float = (elapsed - beat_time) * 1000.0
+	if absf(delta_ms) <= 240.0:
+		_auto_cal_deltas_ms.append(delta_ms)
+
+func _process_calibration_timers(delta: float) -> void:
+	if _finetune_countdown_sec > 0.0:
+		_finetune_countdown_sec = maxf(0.0, _finetune_countdown_sec - delta)
+		if finetune_capture_btn != null:
+			finetune_capture_btn.text = "🎤 Listening (%.1fs)..." % _finetune_countdown_sec
+
+	if _auto_cal_active:
+		var now_sec: float = float(Time.get_ticks_usec()) / 1000000.0
+		var elapsed: float = now_sec - _auto_cal_start_sec
+		var beat_idx: int = int(floor(elapsed / 0.5))
+		if beat_idx >= 1 and beat_idx <= 4 and beat_idx != _auto_cal_last_beat_idx:
+			_auto_cal_last_beat_idx = beat_idx
+			if calibration_status_label != null:
+				calibration_status_label.text = "🥁 BEAT %d / 4 — Play/Clap Now!" % beat_idx
+			spawn_judgment_popup("BEAT %d" % beat_idx, Vector2(640.0, 140.0))
+		elif elapsed >= 2.35:
+			_auto_cal_active = false
+			if auto_cal_btn != null:
+				auto_cal_btn.disabled = false
+			if _auto_cal_deltas_ms.is_empty():
+				if calibration_status_label != null:
+					calibration_status_label.text = "⚠ No mic onsets detected during 4-beat test. Try playing louder or use the slider."
+					calibration_status_label.modulate = Color(1.0, 0.65, 0.25)
+			else:
+				_auto_cal_deltas_ms.sort()
+				var mid: int = _auto_cal_deltas_ms.size() / 2
+				var median_ms: float = clampf(round(_auto_cal_deltas_ms[mid]), -200.0, 300.0)
+				set_latency_offset_ms_ui(median_ms)
+				_apply_latency_offset_ms(median_ms)
+				if calibration_status_label != null:
+					calibration_status_label.text = "✓ Auto-Calibrated Latency Offset: %+d ms (%d beats captured)" % [
+						int(median_ms), _auto_cal_deltas_ms.size()
+					]
+					calibration_status_label.modulate = Color(0.25, 1.0, 0.6)
 
 ## Ensures minimal container hierarchy if instantiated dynamically without scene
 func _ensure_hierarchy() -> void:

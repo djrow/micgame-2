@@ -78,6 +78,12 @@ focus_mode = 0
 theme_override_font_sizes/font_size = 11
 text = "[+] Custom"
 
+[node name="CalibrateBtn" type="Button" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "[C] Tune & Latency"
+
 [node name="PlaybackControls" type="HBoxContainer" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox"]
 layout_mode = 2
 theme_override_constants/separation = 4
@@ -427,3 +433,132 @@ layout_mode = 2
 focus_mode = 0
 theme_override_font_sizes/font_size = 12
 text = "Cancel"
+
+[node name="CalibrationModal" type="PanelContainer" parent="."]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -360.0
+offset_top = -210.0
+offset_right = 360.0
+offset_bottom = 210.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CalVBox" type="VBoxContainer" parent="CalibrationModal"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="CalTitle" type="Label" parent="CalibrationModal/CalVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.84, 0, 1)
+theme_override_font_sizes/font_size = 15
+text = "LATENCY CALIBRATION & INSTRUMENT MODEL FINE-TUNING"
+
+[node name="CalSubtitle" type="Label" parent="CalibrationModal/CalVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.82, 0.92, 1)
+theme_override_font_sizes/font_size = 11
+text = "Calibrate microphone + DSP latency offset and fine-tune the polyphonic model to your instrument's attack, sustain, and harmonic overtone profile."
+autowrap_mode = 2
+
+[node name="LatencyRow" type="HBoxContainer" parent="CalibrationModal/CalVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="LatencyLbl" type="Label" parent="CalibrationModal/CalVBox/LatencyRow"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Input Latency (ms):"
+
+[node name="LatencySlider" type="HSlider" parent="CalibrationModal/CalVBox/LatencyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = -200.0
+max_value = 300.0
+step = 1.0
+value = 50.0
+
+[node name="LatencySpin" type="SpinBox" parent="CalibrationModal/CalVBox/LatencyRow"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+min_value = -200.0
+max_value = 300.0
+step = 1.0
+value = 50.0
+suffix = "ms"
+
+[node name="AutoCalBtn" type="Button" parent="CalibrationModal/CalVBox/LatencyRow"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "🥁 4-Beat Tap/Play Test"
+
+[node name="PresetRow" type="HBoxContainer" parent="CalibrationModal/CalVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PresetLbl" type="Label" parent="CalibrationModal/CalVBox/PresetRow"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Instrument Profile:"
+
+[node name="InstrumentPresetDropdown" type="OptionButton" parent="CalibrationModal/CalVBox/PresetRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+
+[node name="FinetuneCaptureBtn" type="Button" parent="CalibrationModal/CalVBox/PresetRow"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "🎯 Fine-Tune to My Instrument (3s)"
+
+[node name="ModelRow" type="HBoxContainer" parent="CalibrationModal/CalVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ModelLbl" type="Label" parent="CalibrationModal/CalVBox/ModelRow"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "ONNX Weights File:"
+
+[node name="CustomModelInput" type="LineEdit" parent="CalibrationModal/CalVBox/ModelRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 11
+text = "res://assets/models/nmp.onnx"
+placeholder_text = "Path to fine-tuned .onnx weights file"
+
+[node name="BrowseModelBtn" type="Button" parent="CalibrationModal/CalVBox/ModelRow"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "Load .onnx..."
+
+[node name="CalibrationStatusLabel" type="Label" parent="CalibrationModal/CalVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.25, 1, 0.6, 1)
+theme_override_font_sizes/font_size = 11
+text = "Status: Ready — Select an instrument preset or play your instrument for 3 seconds to auto-tune."
+autowrap_mode = 2
+
+[node name="CalActionRow" type="HBoxContainer" parent="CalibrationModal/CalVBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="CloseCalibrationBtn" type="Button" parent="CalibrationModal/CalVBox/CalActionRow"]
+custom_minimum_size = Vector2(140, 30)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 12
+text = "Save & Close"
+

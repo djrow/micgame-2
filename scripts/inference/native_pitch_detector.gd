@@ -39,6 +39,26 @@ var _samples_since_eval: int = 0
 var _candidate_streak_pitches: Array[int] = []
 var _emitted_active_pitches: Array[int] = []
 
+# Fine-tunable Instrument & Player DSP Parameters
+var attack_crest_min: float = 3.8
+var sustain_crest_min: float = 2.8
+var attack_mag_floor: float = 0.050
+var sustain_mag_floor: float = 0.032
+var harmonic_2nd_suppression: float = 0.55
+var harmonic_3rd_suppression: float = 0.40
+var harmonic_4th_suppression: float = 0.45
+
+func apply_instrument_profile(d: Dictionary) -> void:
+	if d.is_empty():
+		return
+	attack_crest_min = clampf(float(d.get("dsp_attack_crest_min", attack_crest_min)), 2.2, 6.0)
+	sustain_crest_min = clampf(float(d.get("dsp_sustain_crest_min", sustain_crest_min)), 1.8, 5.0)
+	attack_mag_floor = clampf(float(d.get("dsp_attack_mag_floor", attack_mag_floor)), 0.020, 0.150)
+	sustain_mag_floor = clampf(float(d.get("dsp_sustain_mag_floor", sustain_mag_floor)), 0.015, 0.120)
+	harmonic_2nd_suppression = clampf(float(d.get("harmonic_2nd_suppression", harmonic_2nd_suppression)), 0.20, 0.85)
+	harmonic_3rd_suppression = clampf(float(d.get("harmonic_3rd_suppression", harmonic_3rd_suppression)), 0.15, 0.75)
+	harmonic_4th_suppression = clampf(float(d.get("harmonic_4th_suppression", harmonic_4th_suppression)), 0.15, 0.75)
+
 func _init(sr: float = 48000.0) -> void:
 	sample_rate = maxf(8000.0, sr)
 	ring_buffer.resize(WINDOW_SIZE)
@@ -208,8 +228,8 @@ func _evaluate_window(require_streak: bool = false) -> void:
 	# Strict thresholds to open from silence/noise; relaxed thresholds to hold an active sustained note.
 	var mean_mag: float = sum_mag / float(NUM_BINS)
 	var spectral_crest: float = max_mag / maxf(mean_mag, 0.00001)
-	var min_mag_floor: float = 0.032 if is_sustaining else 0.050
-	var min_crest: float = 2.8 if is_sustaining else 3.8
+	var min_mag_floor: float = sustain_mag_floor if is_sustaining else attack_mag_floor
+	var min_crest: float = sustain_crest_min if is_sustaining else attack_crest_min
 	if max_mag < min_mag_floor or spectral_crest < min_crest:
 		_clear_on_silence_or_noise(t0)
 		return
@@ -230,11 +250,11 @@ func _evaluate_window(require_streak: bool = false) -> void:
 	for b in range(NUM_BINS):
 		if _norm_mag[b] >= 0.45:
 			if b + 12 < NUM_BINS:
-				_suppressed_mag[b + 12] = maxf(0.0, _suppressed_mag[b + 12] - _norm_mag[b] * 0.55)
+				_suppressed_mag[b + 12] = maxf(0.0, _suppressed_mag[b + 12] - _norm_mag[b] * harmonic_2nd_suppression)
 			if b + 19 < NUM_BINS:
-				_suppressed_mag[b + 19] = maxf(0.0, _suppressed_mag[b + 19] - _norm_mag[b] * 0.40)
+				_suppressed_mag[b + 19] = maxf(0.0, _suppressed_mag[b + 19] - _norm_mag[b] * harmonic_3rd_suppression)
 			if b + 24 < NUM_BINS:
-				_suppressed_mag[b + 24] = maxf(0.0, _suppressed_mag[b + 24] - _norm_mag[b] * 0.45)
+				_suppressed_mag[b + 24] = maxf(0.0, _suppressed_mag[b + 24] - _norm_mag[b] * harmonic_4th_suppression)
 
 	var min_val: float = 0.38 if is_sustaining else 0.48
 	var candidates: Array[Dictionary] = []

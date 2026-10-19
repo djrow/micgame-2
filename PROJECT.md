@@ -6,20 +6,26 @@ The V2 architecture completely decouples audio playback, microphone capture, pol
 - **Autoload Singletons**:
   - `GameManager`: Central game coordinator, level/scene state machine, permission flow.
   - `AudioManager`: Audio stream loading (supporting packaged `.sample`), `LOOP_FORWARD`, playhead sync with sub-frame interpolation.
-  - `AudioCaptureService`: Microphone capture polling, stereo downmix `(L+R)*0.5`, $-46\text{ dB}$ ($RMS < 0.005$) noise gating with clock sync, bus 0 mute protection.
-  - `InferenceService`: Multi-tier polymorphic inference engine (`IAudioPitchModel`), managing Tier 1 (Native ONNX GDExtension), Tier 2 (Python WebSocket), Tier 3 (Pure GDScript Goertzel/DSP), Tier 4 (Mock).
+  - `AudioCaptureService`: Microphone capture polling, stereo downmix `(L+R)*0.5`, $-46\text{ dB}$ ($RMS < 0.005$) noise gating with clock sync, bus 0 mute protection, WASAPI device-switch epoch guard, ~330ms gate hold timer, and Sustain Makeup AGC.
+  - `InferenceService`: Multi-tier polymorphic inference engine (`IAudioPitchModel`), managing Tier 1 (Native ONNX GDExtension), Tier 2 (Python WebSocket), Tier 3 (Pure GDScript Goertzel/DSP), Tier 4 (Mock), and the active `InstrumentProfile`.
   - `ScoringService`: Polyphonic chord matching, timing windows (Perfect $\le 50$ms, Good $\le 100$ms, Miss $> 100$ms), combo multipliers, sustain re-trigger locking.
+- **Instrument Adaptation & Calibration**:
+  - `InstrumentProfile`: Manages per-instrument and per-player acoustic & neural parameters, built-in instrument presets (`balanced`, `plucked_guitar`, `bowed_strings`, `woodwind_brass`, `vocal`), 88-bin ONNX output adapter weights, attack/sustain hysteresis thresholds, harmonic overtone suppression weights, 3-second live in-game instrument fine-tuning, and persistent latency calibration (`user://instrument_profile.json`).
+  - `python/finetune_instrument_model.py`: Offline Python CLI utility to fine-tune `InstrumentProfile` and export calibrated `.onnx` models from player instrument audio recordings.
 - **Visuals & UI**:
   - `GrandStaffHighway`: Two-staff grand staff ($Y=270.0$ to $450.0$, C4=$360.0$, $\Delta Y=9.0\text{ px}$), receptor line at $X=160.0$, harmonic second horizontal offset $\Delta X \ge +15.0\text{ px}$.
-  - `ResponsiveHUD`: Container-based layout adapting dynamically to `DisplayServer.get_display_safe_area()`.
+  - `ResponsiveHUD`: Container-based layout adapting dynamically to `DisplayServer.get_display_safe_area()`, featuring diagnostic dock, Custom Song Modal, and the Latency Calibration & Instrument Fine-Tuning Modal.
   - `PermissionScreen`: Explicit permission gate for mobile before audio initialization.
   - `OscilloscopeView`: Real-time zero-crossing waveform display positioned at $Y=480\dots610$.
 - **Ingestion**:
   - `LevelLoader`: Multi-format audio loader (WAV, MP3, OGG) and chart/OMR coordinator.
   - `OMRProcessor`: 2D Summed Area Table (Integral Image) for $O(1)$ staff line and notehead pitch extraction.
 - **Verification Harnesses**:
-  - Headless Godot runner `tests/test_inference_scoring_runner.gd` with 11 test suites and 95+ assertions.
+  - Headless Godot runner `tests/test_inference_scoring_runner.gd` with 11 test suites and 138/138 passing assertions.
   - Standalone Python E2E matrix `tests/e2e/run_all_e2e_tests.py` with 250 tests across 5 tiers.
+- **CI/CD & Packaging**:
+  - `.github/workflows/release-windows.yml`: Continuous Integration workflow compiling the native GDExtension DLL, packaging Windows x86_64 binaries, and integrating with SignPath Foundation cloud HSM code-signing.
+  - Export presets for Android ARM64 (`micgame3.apk`) and Windows Desktop x86_64 (`micgame3.exe`).
 
 ---
 
@@ -41,11 +47,13 @@ The V2 architecture completely decouples audio playback, microphone capture, pol
 | 13 | F13: Sheet Music Image Ingestion | Loading PNG/JPEG scores, binary thresholding, dimension validation | M3 | blueprint §3.2 |
 | 14 | F14: Projection Profiling OMR | 2D Integral Image, staff line profile, notehead pitch extraction | M3 | blueprint §3.2 |
 | 15 | F15: Audio-Chart Alignment | Ingestion timeline alignment, beat-to-time conversion, calibration offset | M3 | blueprint §3.2 |
-| 16 | F16: Standalone Verification & Test Runners | Godot headless runner (86+ assertions) & Python E2E runner (250 tests) | M5 / E2E | blueprint §5 |
+| 16 | F16: Standalone Verification & Test Runners | Godot headless runner (138 assertions) & Python E2E runner (250 tests) | M5 / E2E | blueprint §5 |
 | 17 | F17: Android Export Preset | ARM64-v8a target, RECORD_AUDIO permission, GL Compatibility renderer | M1 / M4 | blueprint §6.2 |
-| 18 | F18: Windows Export Preset | Windows Desktop x86_64, runnable settings | M1 / M4 | blueprint §6.2 |
+| 18 | F18: Windows Export Preset | Windows Desktop x86_64, runnable settings, embedded PCK and ONNX | M1 / M4 | blueprint §6.2 |
 | 19 | F19: Headless Project Integrity | Headless execution without display/audio crashes | M1 / M5 | blueprint §5.1 |
 | 20 | F20: E2E Test Suite Validation | 5-tier test matrix, 100% passing, exit code 0 | E2E / M5 | blueprint §5.2 |
+| 21 | F21: Interactive Latency Calibration | Visual/UI slider (-200..+300ms), 4-beat auto-calibration wizard, disk persistence | M6 | feature update |
+| 22 | F22: Instrument & Player Model Fine-Tuning | Instrument presets, 88-bin neural gain adapter, live 3s fine-tuning, custom ONNX loader | M6 | feature update |
 
 ---
 
@@ -57,7 +65,18 @@ The V2 architecture completely decouples audio playback, microphone capture, pol
 | M2 | Multi-Tier Polyphonic Pitch Inference Engine | `InferenceService`, `IAudioPitchModel`, `MockDriver`, `OnnxNativeDriver`, `NativePitchDetector` (pure GDScript DSP), `WebSocketDriver`, Python inference server | M1 | DONE (Verified 119/119 unit, 46/46 dsp, 169/169 routing, 30/30 py, 12/12 audit) |
 | M3 | Grand Staff Highway, Level Loader & Polyphonic Scoring | `NoteData`, `NoteRenderer`, `GrandStaffHighway`, `highway.tscn`, `LevelLoader`, `OMRProcessor`, `omr_engine.py`, `ScoringService` | M1 | DONE (Verified 2355 highway checks, 68 runner checks, 146 scoring checks, 7/7 Python OMR pass, Gate PASS) |
 | M4 | Responsive HUD, Permission Gate, Oscilloscope & Main Scene | `ResponsiveHUD`, `hud.tscn`, `PermissionScreen`, `permission_screen.tscn`, `OscilloscopeView`, `Main`, `main.tscn`, bundled assets (`assets/`) | M1, M2, M3 | DONE (Verified 130/130 challenger, 99/99 integration, 62/62 telemetry, 632 GDScript assertions pass, Gate PASS) |
-| M5 | Final Verification & Integration Acceptance | 100% pass of `tests/test_inference_scoring_runner.gd` (86+ assertions) and `run_all_e2e_tests.py` (250 tests) | E2E, M1..M4 | DONE (Verified 105/105 Godot headless assertions + 250/250 Python E2E tests, Gate PASS) |
+| M5 | Final Verification & Integration Acceptance | 100% pass of `tests/test_inference_scoring_runner.gd` (138 assertions) and `run_all_e2e_tests.py` (250 tests) | E2E, M1..M4 | DONE (Verified 138/138 Godot headless assertions + 250/250 Python E2E tests, Gate PASS) |
+| M6 | Latency Calibration & Instrument Adaptation | `InstrumentProfile`, `CalibrationModal`, 4-beat auto-calibrator, live 3s fine-tuner, `python/finetune_instrument_model.py` | M1..M5 | DONE (Verified in Suite 11, Gate PASS) |
+
+---
+
+## Roadmap & Explorations for Future Work
+- **Intonation & Microtonal Cent Deviation (Sharp / Flat Tones)**:
+  - *Problem Statement*: Acoustic instruments and vocalists frequently sing or play microtonally sharp or flat by $\pm 10\dots50\text{ cents}$, or introduce expressive pitch drift/vibrato.
+  - *Exploration Vectors*:
+    1. Sub-semitone parabolic spectral interpolation across adjacent Goertzel/CQT bins to compute continuous pitch in cents: $f = f_0 \cdot 2^{(\Delta\text{cents} / 1200)}$.
+    2. Visual intonation highway feedback (e.g. dynamic color tinting or pitch-bend trail above/below the staff line when a note is $> 20\text{ cents}$ sharp or flat).
+    3. Configurable cent tolerance threshold ($\pm 35\text{ cents}$ for relaxed/beginner mode vs. $\pm 15\text{ cents}$ for concert/mastery mode) and A4 reference frequency calibration (A4=440 Hz vs. A4=442 Hz).
 
 ---
 
@@ -71,6 +90,8 @@ The V2 architecture completely decouples audio playback, microphone capture, pol
 ### InferenceService -> ScoringService / Highway
 - `signal pitch_detected(detected_pitches: Array[int], confidence_map: Dictionary)`
 - `signal onset_detected(onset_pitches: Array[int])`
+- `signal instrument_profile_changed(profile_dict: Dictionary)`
+- `signal finetune_completed(result: Dictionary)`
 - Pitches: MIDI integers (e.g., $60 = C_4$, $64 = E_4$, $67 = G_4$).
 
 ### ScoringService <-> GameManager / Highway
@@ -93,11 +114,18 @@ c:\Users\david\Documents\micgame-2\
 ├── default_bus_layout.tres
 ├── export_presets.cfg
 ├── onnx_pitch.gdextension
+├── SIGNPATH.md
+├── LICENSE
+├── .gitignore
+├── .github/
+│   └── workflows/
+│       └── release-windows.yml
 ├── assets/
 │   ├── audio/
 │   ├── charts/
 │   ├── scores/
 │   ├── models/
+│   │   └── nmp.onnx
 │   └── test_pieces/
 ├── scripts/
 │   ├── game_manager.gd
@@ -116,6 +144,7 @@ c:\Users\david\Documents\micgame-2\
 │   ├── main.gd
 │   └── inference/
 │       ├── audio_pitch_model.gd
+│       ├── instrument_profile.gd
 │       ├── mock_driver.gd
 │       ├── onnx_native_driver.gd
 │       ├── native_pitch_detector.gd
@@ -126,6 +155,7 @@ c:\Users\david\Documents\micgame-2\
 │   ├── hud.tscn
 │   └── permission_screen.tscn
 ├── python/
+│   ├── finetune_instrument_model.py
 │   ├── inference_server.py
 │   ├── basic_pitch_onnx.py
 │   └── omr_engine.py
