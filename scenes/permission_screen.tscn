@@ -1,0 +1,95 @@
+[gd_scene load_steps=2 format=3 uid="uid://permission_screen_v2"]
+
+[ext_resource type="Script" path="res://scripts/permission_screen.gd" id="1_perm"]
+
+[node name="PermissionScreen" type="CanvasLayer"]
+layer = 10
+script = ExtResource("1_perm")
+
+[node name="Dimmer" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.04, 0.06, 0.09, 0.94)
+
+[node name="SafeAreaMargin" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="CenterContainer" type="CenterContainer" parent="SafeAreaMargin"]
+layout_mode = 2
+
+[node name="ModalCard" type="PanelContainer" parent="SafeAreaMargin/CenterContainer"]
+custom_minimum_size = Vector2(620, 380)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="SafeAreaMargin/CenterContainer/ModalCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 24
+
+[node name="ContentVBox" type="VBoxContainer" parent="SafeAreaMargin/CenterContainer/ModalCard/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="TitleLabel" type="Label" parent="SafeAreaMargin/CenterContainer/ModalCard/Margin/ContentVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "MICROPHONE PERMISSION"
+horizontal_alignment = 1
+
+[node name="SubtitleLabel" type="Label" parent="SafeAreaMargin/CenterContainer/ModalCard/Margin/ContentVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.35, 0.75, 1, 1)
+theme_override_font_sizes/font_size = 13
+text = "Real-Time Audio Pitch Detection Setup"
+horizontal_alignment = 1
+
+[node name="DescriptionLabel" type="Label" parent="SafeAreaMargin/CenterContainer/ModalCard/Margin/ContentVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.86, 0.92, 1)
+theme_override_font_sizes/font_size = 13
+text = "This game uses your device microphone to detect the pitch of your voice or musical instrument in real time.
+
+All polyphonic audio inference runs 100% locally on your device. No audio recordings are ever saved or uploaded."
+autowrap_mode = 2
+
+[node name="StatusPill" type="PanelContainer" parent="SafeAreaMargin/CenterContainer/ModalCard/Margin/ContentVBox"]
+layout_mode = 2
+
+[node name="StatusLabel" type="Label" parent="SafeAreaMargin/CenterContainer/ModalCard/Margin/ContentVBox/StatusPill"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.8, 0.2, 1)
+theme_override_font_sizes/font_size = 12
+text = "Status: Microphone permission required"
+horizontal_alignment = 1
+
+[node name="ButtonVBox" type="VBoxContainer" parent="SafeAreaMargin/CenterContainer/ModalCard/Margin/ContentVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RequestButton" type="Button" parent="SafeAreaMargin/CenterContainer/ModalCard/Margin/ContentVBox/ButtonVBox"]
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+text = "Grant Microphone Permission"
+
+[node name="StartButton" type="Button" parent="SafeAreaMargin/CenterContainer/ModalCard/Margin/ContentVBox/ButtonVBox"]
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+text = "Start Game"
+
+[node name="SkipButton" type="Button" parent="SafeAreaMargin/CenterContainer/ModalCard/Margin/ContentVBox/ButtonVBox"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Practice Mode (Keyboard Strum)"

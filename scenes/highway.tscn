@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3 uid="uid://highway_grand_staff"]
+
+[ext_resource type="Script" path="res://scripts/grand_staff_highway.gd" id="1_highway"]
+[ext_resource type="Script" path="res://scripts/note_renderer.gd" id="2_renderer"]
+
+[node name="GrandStaffHighway" type="Node2D"]
+script = ExtResource("1_highway")
+
+[node name="NoteRenderer" type="Node2D" parent="."]
+script = ExtResource("2_renderer")
+
+[node name="AudioPlayer" type="AudioStreamPlayer" parent="."]
+bus = &"Master"

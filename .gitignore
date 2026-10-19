@@ -1,0 +1,30 @@
+# Godot 4+ cache and import metadata
+.godot/
+
+# Local & CI build outputs (SignPath requires repositories to contain source only, not pre-built binaries)
+micgame3.exe
+micgame3.console.exe
+micgame3.pck
+micgame3.apk
+micgame3.apk.idsig
+*.dll
+*.so
+*.dylib
+bin/windows/*.dll
+bin/android/*.so
+bin/macos/*.dylib
+bin/ios/*.xcframework
+build/
+dist/
+
+# Python virtual environments & caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local agent / IDE scratch files
+.agents/
+.DS_Store
+Thumbs.db

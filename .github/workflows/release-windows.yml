@@ -1,0 +1,137 @@
+name: Build & Sign Windows Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: "4.4.1"
+  GODOT_RELEASE_TYPE: "stable"
+  ORT_VERSION: "1.17.3"
+  RCEDIT_VERSION: "2.0.0"
+
+jobs:
+  build-windows:
+    name: Build Windows x86_64 & Sign via SignPath
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Source Repository
+        uses: actions/checkout@v4
+
+      - name: Validate Project Configurations
+        shell: pwsh
+        run: |
+          python tests/validate_configs.py
+
+      - name: Compile Native ONNX Pitch GDExtension DLL from Source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "bin/windows" | Out-Null
+          gcc -shared -O2 -I./native native/onnx_pitch_gdextension.c -o bin/windows/libonnx_pitch.windows.x86_64.dll
+          if (-not (Test-Path "bin/windows/libonnx_pitch.windows.x86_64.dll")) {
+            throw "Failed to compile libonnx_pitch.windows.x86_64.dll"
+          }
+
+      - name: Fetch Official Microsoft-Signed ONNX Runtime DLL
+        shell: pwsh
+        run: |
+          $ortZip = "$env:RUNNER_TEMP\onnxruntime.zip"
+          $ortUrl = "https://github.com/microsoft/onnxruntime/releases/download/v$env:ORT_VERSION/onnxruntime-win-x64-$env:ORT_VERSION.zip"
+          Invoke-WebRequest -Uri $ortUrl -OutFile $ortZip
+          Expand-Archive -Path $ortZip -DestinationPath "$env:RUNNER_TEMP\ort" -Force
+          Copy-Item "$env:RUNNER_TEMP\ort\onnxruntime-win-x64-$env:ORT_VERSION\lib\onnxruntime.dll" "bin/windows/onnxruntime.dll" -Force
+
+      - name: Setup Headless Godot Engine, Export Templates & rcedit
+        shell: pwsh
+        run: |
+          $tag = "$env:GODOT_VERSION-$env:GODOT_RELEASE_TYPE"
+          $baseUrl = "https://github.com/godotengine/godot-builds/releases/download/$tag"
+
+          # 1. Download Godot Win64 console executable
+          $godotZip = "$env:RUNNER_TEMP\godot.zip"
+          Invoke-WebRequest -Uri "$baseUrl/Godot_v${tag}_win64.exe.zip" -OutFile $godotZip
+          Expand-Archive -Path $godotZip -DestinationPath "$env:RUNNER_TEMP\godot" -Force
+
+          # 2. Download & install Godot export templates
+          $tpzFile = "$env:RUNNER_TEMP\templates.tpz"
+          Invoke-WebRequest -Uri "$baseUrl/Godot_v${tag}_export_templates.tpz" -OutFile $tpzFile
+          $tpzZip = "$env:RUNNER_TEMP\templates.zip"
+          Move-Item -Path $tpzFile -Destination $tpzZip -Force
+          Expand-Archive -Path $tpzZip -DestinationPath "$env:RUNNER_TEMP\templates" -Force
+
+          $templatesDir = "$env:APPDATA\Godot\export_templates\$env:GODOT_VERSION.$env:GODOT_RELEASE_TYPE"
+          New-Item -ItemType Directory -Force -Path $templatesDir | Out-Null
+          Move-Item -Path "$env:RUNNER_TEMP\templates\templates\*" -Destination $templatesDir -Force
+
+          # 3. Download rcedit so Godot stamps PE metadata into micgame3.exe for SignPath policy checks
+          $rceditPath = "$env:RUNNER_TEMP\rcedit-x64.exe"
+          Invoke-WebRequest -Uri "https://github.com/electron/rcedit/releases/download/v$env:RCEDIT_VERSION/rcedit-x64.exe" -OutFile $rceditPath
+
+          $editorDataDir = "$env:APPDATA\Godot"
+          New-Item -ItemType Directory -Force -Path $editorDataDir | Out-Null
+          $settingsFile = "$editorDataDir\editor_settings-4.4.tres"
+          $rceditForward = $rceditPath -replace '\\', '/'
+          @"
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/windows/rcedit = "$rceditForward"
+          "@ | Set-Content -Path $settingsFile -Encoding UTF8
+
+      - name: Import Project & Export Windows x86_64 Executable
+        shell: pwsh
+        run: |
+          $tag = "$env:GODOT_VERSION-$env:GODOT_RELEASE_TYPE"
+          $godotExe = "$env:RUNNER_TEMP\godot\Godot_v${tag}_win64_console.exe"
+
+          & $godotExe --headless --import
+          & $godotExe --headless --export-release "Windows Desktop" "./micgame3.exe"
+
+          if (-not (Test-Path "./micgame3.exe")) {
+            throw "Godot Windows export failed: micgame3.exe was not created."
+          }
+
+          New-Item -ItemType Directory -Force -Path "dist/package" | Out-Null
+          Copy-Item "./micgame3.exe" "dist/package/micgame3.exe" -Force
+          Copy-Item "./bin/windows/libonnx_pitch.windows.x86_64.dll" "dist/package/libonnx_pitch.windows.x86_64.dll" -Force
+          Copy-Item "./bin/windows/onnxruntime.dll" "dist/package/onnxruntime.dll" -Force
+          Copy-Item "./LICENSE" "dist/package/LICENSE.txt" -Force
+
+          Compress-Archive -Path "dist/package/*" -DestinationPath "dist/micgame3-windows-x86_64.zip" -Force
+
+      - name: Upload Unsigned Build Artifact (Used by SignPath Verification)
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-windows-zip
+          path: dist/micgame3-windows-x86_64.zip
+          retention-days: 14
+
+      - name: Submit Signing Request to SignPath Foundation
+        if: env.SIGNPATH_API_TOKEN != ''
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        uses: signpath/github-action-submit-signing-request@v0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'micgame-2' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_SLUG || 'windows-zip' }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/signed
+
+      - name: Upload Signed Artifact to GitHub Release (on Tag Push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/signed/*
+            dist/micgame3-windows-x86_64.zip

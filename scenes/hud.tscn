@@ -1,0 +1,429 @@
+[gd_scene load_steps=2 format=3 uid="uid://responsive_hud_v2"]
+
+[ext_resource type="Script" path="res://scripts/responsive_hud.gd" id="1_hud"]
+
+[node name="ResponsiveHUD" type="CanvasLayer"]
+layer = 10
+script = ExtResource("1_hud")
+
+[node name="SafeMarginContainer" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="MainLayout" type="VBoxContainer" parent="SafeMarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="TopBar" type="PanelContainer" parent="SafeMarginContainer/MainLayout"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+
+[node name="TopHBox" type="HBoxContainer" parent="SafeMarginContainer/MainLayout/TopBar"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="PieceInfoContainer" type="HBoxContainer" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox"]
+layout_mode = 2
+
+[node name="PieceTitleLabel" type="Label" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceInfoContainer"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.98, 1, 1)
+theme_override_font_sizes/font_size = 13
+text = "Piece: Ode to Joy (Monophonic)"
+clip_text = true
+
+[node name="PieceButtons" type="HBoxContainer" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Piece1Btn" type="Button" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "[1] Ode to Joy"
+
+[node name="Piece2Btn" type="Button" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "[2] Bach Minuet"
+
+[node name="Piece3Btn" type="Button" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "[3] Triads"
+
+[node name="OMRScanBtn" type="Button" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "[O] OMR"
+
+[node name="CustomSongBtn" type="Button" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/PieceButtons"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "[+] Custom"
+
+[node name="PlaybackControls" type="HBoxContainer" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PlayPauseBtn" type="Button" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/PlaybackControls"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "⏸ Pause"
+
+[node name="RestartBtn" type="Button" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/PlaybackControls"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "↺ Restart"
+
+[node name="TimelineContainer" type="HBoxContainer" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="TimeElapsedLabel" type="Label" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/TimelineContainer"]
+custom_minimum_size = Vector2(36, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.82, 0.9, 1)
+theme_override_font_sizes/font_size = 11
+text = "0:00"
+horizontal_alignment = 2
+
+[node name="SongProgressBar" type="ProgressBar" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/TimelineContainer"]
+custom_minimum_size = Vector2(80, 14)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+show_percentage = false
+
+[node name="TimeTotalLabel" type="Label" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/TimelineContainer"]
+custom_minimum_size = Vector2(36, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.82, 0.9, 1)
+theme_override_font_sizes/font_size = 11
+text = "0:00"
+
+[node name="ScorePanel" type="HBoxContainer" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ScoreContainer" type="VBoxContainer" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/ScorePanel"]
+layout_mode = 2
+alignment = 1
+
+[node name="ScoreLabel" type="Label" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/ScorePanel/ScoreContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.75, 0.88, 1)
+theme_override_font_sizes/font_size = 10
+text = "SCORE"
+horizontal_alignment = 2
+
+[node name="ScoreValue" type="Label" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/ScorePanel/ScoreContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "000000"
+horizontal_alignment = 2
+
+[node name="AccuracyContainer" type="VBoxContainer" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/ScorePanel"]
+layout_mode = 2
+alignment = 1
+
+[node name="AccuracyLabel" type="Label" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/ScorePanel/AccuracyContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.75, 0.88, 1)
+theme_override_font_sizes/font_size = 10
+text = "ACCURACY"
+horizontal_alignment = 2
+
+[node name="AccuracyValue" type="Label" parent="SafeMarginContainer/MainLayout/TopBar/TopHBox/ScorePanel/AccuracyContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "100.0%"
+horizontal_alignment = 2
+
+[node name="HighwaySpacer" type="Control" parent="SafeMarginContainer/MainLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="ComboContainer" type="VBoxContainer" parent="SafeMarginContainer/MainLayout/HighwaySpacer"]
+layout_mode = 0
+offset_left = 60.0
+offset_top = 40.0
+offset_right = 260.0
+offset_bottom = 120.0
+
+[node name="ComboLabel" type="Label" parent="SafeMarginContainer/MainLayout/HighwaySpacer/ComboContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 28
+text = "0 COMBO"
+
+[node name="MultiplierLabel" type="Label" parent="SafeMarginContainer/MainLayout/HighwaySpacer/ComboContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+theme_override_font_sizes/font_size = 16
+text = "1x MULTIPLIER"
+
+[node name="DiagnosticDock" type="PanelContainer" parent="SafeMarginContainer/MainLayout"]
+custom_minimum_size = Vector2(0, 130)
+layout_mode = 2
+
+[node name="DockHBox" type="HBoxContainer" parent="SafeMarginContainer/MainLayout/DiagnosticDock"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="MicColumn" type="VBoxContainer" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox"]
+custom_minimum_size = Vector2(315, 0)
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="MicHeaderHBox" type="HBoxContainer" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/MicColumn"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="MicTitle" type="Label" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/MicColumn/MicHeaderHBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.92, 1, 1)
+theme_override_font_sizes/font_size = 12
+text = "MIC INPUT"
+
+[node name="MicStatusLabel" type="Label" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/MicColumn/MicHeaderHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.2, 1, 0.5, 1)
+theme_override_font_sizes/font_size = 11
+text = "● CAPTURING"
+clip_text = false
+
+[node name="SelectDeviceLabel" type="Label" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/MicColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.82, 0.9, 1)
+theme_override_font_sizes/font_size = 11
+text = "Select Input Device:"
+
+[node name="MicDropdownHBox" type="HBoxContainer" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/MicColumn"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="MicDropdown" type="OptionButton" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/MicColumn/MicDropdownHBox"]
+custom_minimum_size = Vector2(210, 26)
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+clip_text = true
+text_overrun_behavior = 3
+fit_to_longest_item = false
+
+[node name="RefreshMicBtn" type="Button" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/MicColumn/MicDropdownHBox"]
+custom_minimum_size = Vector2(28, 26)
+layout_mode = 2
+focus_mode = 0
+text = "↻"
+
+[node name="MicLevelLabel" type="Label" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/MicColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.9, 0.96, 1)
+theme_override_font_sizes/font_size = 11
+text = "Level: -100 dB | RMS: 0.0000 | Frames: 0"
+clip_text = true
+
+[node name="TestSignalBtn" type="Button" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/MicColumn"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "🔊 Inject Test Chord"
+
+[node name="OscilloscopeColumn" type="PanelContainer" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox"]
+custom_minimum_size = Vector2(360, 100)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="InferenceColumn" type="VBoxContainer" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox"]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="InferenceTitle" type="Label" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/InferenceColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.84, 0, 1)
+theme_override_font_sizes/font_size = 13
+text = "POLYPHONIC INFERENCE MODEL"
+
+[node name="InferenceBackendLabel" type="Label" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/InferenceColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.2, 1, 0.55, 1)
+theme_override_font_sizes/font_size = 12
+text = "● Engine: Initializing..."
+clip_text = true
+
+[node name="InferenceMetricsLabel" type="Label" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/InferenceColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.78, 0.85, 0.94, 1)
+theme_override_font_sizes/font_size = 11
+text = "Latency: 0.0 ms | Inferences: 0"
+clip_text = true
+
+[node name="NotesPanel" type="PanelContainer" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/InferenceColumn"]
+layout_mode = 2
+
+[node name="NotesVBox" type="VBoxContainer" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/InferenceColumn/NotesPanel"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="DetectedNotesLabel" type="Label" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/InferenceColumn/NotesPanel/NotesVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.3, 1, 0.6, 1)
+theme_override_font_sizes/font_size = 13
+text = "Active Notes: — (Sing or Play)"
+autowrap_mode = 2
+
+[node name="LastOnsetLabel" type="Label" parent="SafeMarginContainer/MainLayout/DiagnosticDock/DockHBox/InferenceColumn/NotesPanel/NotesVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.82, 0.92, 1)
+theme_override_font_sizes/font_size = 11
+text = "Last Onset: —"
+clip_text = true
+
+[node name="JudgmentLayer" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="CustomSongModal" type="PanelContainer" parent="."]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -340.0
+offset_top = -170.0
+offset_right = 340.0
+offset_bottom = 170.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ModalVBox" type="VBoxContainer" parent="CustomSongModal"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ModalTitle" type="Label" parent="CustomSongModal/ModalVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.2, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 15
+text = "IMPORT CUSTOM SHEET MUSIC & BACKING TRACK"
+
+[node name="ModalSubtitle" type="Label" parent="CustomSongModal/ModalVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.82, 0.92, 1)
+theme_override_font_sizes/font_size = 11
+text = "Select a sheet music image (PNG/JPG) for on-device OMR digitization or a JSON chart, paired with an audio file (WAV/MP3/OGG)."
+autowrap_mode = 2
+
+[node name="SheetRow" type="HBoxContainer" parent="CustomSongModal/ModalVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SheetLbl" type="Label" parent="CustomSongModal/ModalVBox/SheetRow"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Sheet Music:"
+
+[node name="CustomSheetInput" type="LineEdit" parent="CustomSongModal/ModalVBox/SheetRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 11
+text = "res://assets/test_pieces/piece_1_monophonic/score.png"
+placeholder_text = "Path to sheet music (.png, .jpg) or chart (.json)"
+
+[node name="BrowseSheetBtn" type="Button" parent="CustomSongModal/ModalVBox/SheetRow"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "Browse..."
+
+[node name="AudioRow" type="HBoxContainer" parent="CustomSongModal/ModalVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AudioLbl" type="Label" parent="CustomSongModal/ModalVBox/AudioRow"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Backing Track:"
+
+[node name="CustomAudioInput" type="LineEdit" parent="CustomSongModal/ModalVBox/AudioRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 11
+text = "res://assets/test_pieces/piece_1_monophonic/audio.wav"
+placeholder_text = "Path to backing audio (.wav, .mp3, .ogg)"
+
+[node name="BrowseAudioBtn" type="Button" parent="CustomSongModal/ModalVBox/AudioRow"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 11
+text = "Browse..."
+
+[node name="BpmRow" type="HBoxContainer" parent="CustomSongModal/ModalVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BpmLbl" type="Label" parent="CustomSongModal/ModalVBox/BpmRow"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Tempo (BPM):"
+
+[node name="CustomBpmSpin" type="SpinBox" parent="CustomSongModal/ModalVBox/BpmRow"]
+layout_mode = 2
+min_value = 40.0
+max_value = 240.0
+step = 1.0
+value = 120.0
+
+[node name="ActionRow" type="HBoxContainer" parent="CustomSongModal/ModalVBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ConfirmCustomSongBtn" type="Button" parent="CustomSongModal/ModalVBox/ActionRow"]
+custom_minimum_size = Vector2(220, 30)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 12
+text = "Digitize Sheet Music & Start"
+
+[node name="CancelCustomSongBtn" type="Button" parent="CustomSongModal/ModalVBox/ActionRow"]
+custom_minimum_size = Vector2(80, 30)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 12
+text = "Cancel"

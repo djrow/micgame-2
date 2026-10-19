@@ -1,0 +1,31 @@
+[configuration]
+
+entry_symbol = "onnx_pitch_library_init"
+compatibility_minimum = "4.1"
+reloadable = false
+
+[libraries]
+
+windows.debug.x86_64 = "res://bin/windows/libonnx_pitch.windows.x86_64.dll"
+windows.release.x86_64 = "res://bin/windows/libonnx_pitch.windows.x86_64.dll"
+android.debug.arm64 = "res://bin/android/libonnx_pitch.android.arm64.so"
+android.release.arm64 = "res://bin/android/libonnx_pitch.android.arm64.so"
+macos.debug = "res://bin/macos/libonnx_pitch.macos.dylib"
+macos.release = "res://bin/macos/libonnx_pitch.macos.dylib"
+ios.debug = "res://bin/ios/onnx_pitch.ios.xcframework"
+ios.release = "res://bin/ios/onnx_pitch.ios.xcframework"
+
+[dependencies]
+
+windows.debug.x86_64 = {
+    "res://bin/windows/onnxruntime.dll": ""
+}
+windows.release.x86_64 = {
+    "res://bin/windows/onnxruntime.dll": ""
+}
+android.debug.arm64 = {
+    "res://bin/android/libonnxruntime.so": ""
+}
+android.release.arm64 = {
+    "res://bin/android/libonnxruntime.so": ""
+}
