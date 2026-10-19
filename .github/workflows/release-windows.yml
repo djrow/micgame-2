@@ -19,6 +19,8 @@ jobs:
   build-windows:
     name: Build Windows x86_64 & Sign via SignPath
     runs-on: windows-latest
+    env:
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
 
     steps:
       - name: Checkout Source Repository
@@ -115,9 +117,7 @@ jobs:
 
       - name: Submit Signing Request to SignPath Foundation
         if: env.SIGNPATH_API_TOKEN != ''
-        env:
-          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-        uses: signpath/github-action-submit-signing-request@v0
+        uses: signpath/github-action-submit-signing-request@v2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
